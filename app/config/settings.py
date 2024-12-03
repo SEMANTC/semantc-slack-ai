@@ -5,7 +5,7 @@ from functools import lru_cache
 from typing import Optional
 
 class Settings(BaseSettings):
-    """Application settings and configuration"""
+    """APPLICATION SETTINGS AND CONFIGURATION"""
     
     # Slack Configuration
     SLACK_BOT_TOKEN: str
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # OpenAI Configuration
     OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-4-1106-preview"  # Default to latest GPT-4
+    OPENAI_MODEL: str = "gpt-4o"  # Default to latest GPT-4
     OPENAI_TEMPERATURE: float = 0.7
     MAX_TOKENS: int = 2000
 

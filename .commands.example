@@ -1,9 +1,0 @@
-# Setup local development
-chmod +x scripts/*.sh
-./scripts/setup.sh
-
-# Run tests
-./scripts/test.sh
-
-# Deploy
-./scripts/deploy.sh

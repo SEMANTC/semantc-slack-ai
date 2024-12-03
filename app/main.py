@@ -1,12 +1,21 @@
 # app/main.py
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import logging
+import time
 
 from .config import get_settings
 from .slack import SlackBot
 from .utils import setup_logger
+from .models import Message, MessageType
+
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Initialize settings and logger
 settings = get_settings()
@@ -16,9 +25,7 @@ logger = setup_logger(__name__)
 app = FastAPI(
     title="Slack AI Assistant",
     description="A Slack bot that uses RAG to answer questions using company documents",
-    version="0.1.0",
-    docs_url="/docs" if settings.DEBUG_MODE else None,
-    redoc_url="/redoc" if settings.DEBUG_MODE else None
+    version="0.1.0"
 )
 
 # Add CORS middleware
@@ -37,20 +44,11 @@ slack_bot = SlackBot()
 async def startup():
     """Startup tasks"""
     logger.info("Starting Slack AI Assistant")
-    try:
-        await slack_bot.start()
-    except Exception as e:
-        logger.error(f"Failed to start Slack bot: {str(e)}")
-        raise
 
 @app.on_event("shutdown")
 async def shutdown():
     """Shutdown tasks"""
     logger.info("Shutting down Slack AI Assistant")
-    try:
-        await slack_bot.stop()
-    except Exception as e:
-        logger.error(f"Error during shutdown: {str(e)}")
 
 # Health check endpoint
 @app.get("/health")
@@ -62,18 +60,67 @@ async def health_check():
     }
 
 # Slack endpoints
-app.post("/slack/events")(slack_bot.handler.handle)
-app.post("/slack/commands")(slack_bot.handler.handle)
+@app.post("/slack/events")
+async def endpoint_slack_events(request: Request):
+    """Handle Slack events"""
+    try:
+        return await slack_bot.handler.handle(request)
+    except Exception as e:
+        logger.error(f"Error handling event: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal server error"}
+        )
 
-# Error handlers
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    """Global exception handler"""
-    logger.error(f"Global error: {str(exc)}")
-    return {
-        "error": str(exc),
-        "detail": str(exc) if settings.DEBUG_MODE else "Internal server error"
-    }, 500
+@app.post("/slack/commands")
+async def endpoint_slack_commands(request: Request):
+    """Handle Slack commands"""
+    try:
+        form_data = await request.form()
+        command = form_data.get("command")
+        
+        # Create a say function for this request
+        async def say(response):
+            # Use Slack's Web API to send message
+            await slack_bot.app.client.chat_postMessage(
+                channel=form_data.get("channel_id"),
+                text=response["text"],
+                thread_ts=response.get("thread_ts")
+            )
+
+        # Create an ack function
+        async def ack():
+            return JSONResponse(content={
+                "response_type": "ephemeral",
+                "text": "Processing your request..."
+            })
+
+        command_data = {
+            "command": command,
+            "text": form_data.get("text"),
+            "user_id": form_data.get("user_id"),
+            "channel_id": form_data.get("channel_id"),
+            "command_ts": str(time.time()),
+            "say": say,
+            "ack": ack
+        }
+
+        if command == "/ask":
+            return await slack_bot.command_handler.handle_ask(command_data)
+            
+        return JSONResponse(content={
+            "response_type": "ephemeral",
+            "text": f"Unknown command: {command}"
+        })
+
+    except Exception as e:
+        logger.error(f"Error processing command: {str(e)}")
+        return JSONResponse(
+            content={
+                "response_type": "ephemeral",
+                "text": "Sorry, something went wrong processing your command."
+            }
+        )
 
 if __name__ == "__main__":
     import uvicorn

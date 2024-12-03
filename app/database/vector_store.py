@@ -1,6 +1,6 @@
 # app/database/vector_store.
 
-from langchain_community.vectorstores import Pinecone
+from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings
 from pinecone import Pinecone as PineconeClient
 from typing import List, Dict, Any, Optional
@@ -26,7 +26,7 @@ class VectorStore:
             self.index = self.pc.Index(settings.PINECONE_INDEX_NAME)
             
             # Initialize vector store
-            self.vector_store = Pinecone(
+            self.vector_store = PineconeVectorStore(
                 index=self.index,
                 embedding=self.embeddings,
                 text_key="text",
